@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chroma: Octopus Escape</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f1ebe2;--fg:#1b2140;--panel:#ffffff;--ac:#c2186f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141b34;--fg:#f3efe6;--panel:#1f2a4d;--ac:#ff5fae}}
+:root[data-theme="dark"]{--bg:#141b34;--fg:#f3efe6;--panel:#1f2a4d;--ac:#ff5fae}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:'Bricolage Grotesque',system-ui,sans-serif;display:grid;place-items:center}
+[hidden]{display:none!important}
+#wrap{width:100%;max-width:900px;padding:12px;box-sizing:border-box}
+h1{font-size:1.5rem;font-weight:800;margin:0 0 8px}
+.stage{position:relative}
+canvas{width:100%;height:auto;display:block;border-radius:14px;background:#0d1426}
+#ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:rgba(13,20,38,.86);color:#f3efe6;border-radius:14px}
+#ov h2{font-size:2rem;font-weight:800;margin:0 0 10px}
+#ov p{max-width:46ch;line-height:1.55;font-size:1.05rem;margin:0 0 18px}
+button{font:inherit;font-weight:700;background:#ff5fae;color:#1b0f2e;border:0;border-radius:10px;padding:11px 24px;cursor:pointer}
+button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#cap{min-height:3em;font-size:1.1rem;line-height:1.45;margin:10px 0 4px;max-width:70ch}
+#hud{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:.95rem}
+#sw{width:22px;height:22px;border-radius:50%;border:2px solid var(--fg)}
+#hint{flex:1;min-width:200px;opacity:.85}
+#skip,#mu{background:var(--panel);color:var(--fg);border:1px solid var(--fg);padding:6px 14px}
+</style></head><body>
+<div id="wrap">
+<h1>Chroma: Octopus Escape</h1>
+<div class="stage"><canvas id="c" width="800" height="480" aria-label="Game canvas"></canvas>
+<div id="ov"><h2>Chroma: Octopus Escape</h2><p>An octopus that can copy any colour. A lab full of guards. Match the colour beneath you to stay hidden.</p><button id="ovb">Start story</button></div></div>
+<div id="cap" aria-live="polite"></div>
+<div id="hud"><span id="sw"></span><b id="cam"></b><span id="hint">Desktop keyboard needed.</span><button id="mu">Sound: on</button><button id="skip" hidden>Skip story</button></div>
+</div>
+<script>
+const $=id=>document.getElementById(id),cv=$('c'),x=cv.getContext('2d'),W=800,H=480,SH=24;
+const K={};let sp=0;
+addEventListener('keydown',e=>{au();K[e.code]=1;if(e.code=='Space'||e.code.startsWith('Arrow'))e.preventDefault();if(e.code=='Space'||e.code=='Enter')sp=1});
+addEventListener('keyup',e=>K[e.code]=0);
+const cl=(v,a,b)=>Math.max(a,Math.min(b,v)),hsl=(h,s,l,a=1)=>`hsla(${(h%360+360)%360},${s}%,${l}%,${a})`;
+const dH=(a,b)=>{let d=Math.abs(a-b)%360;return d>180?360-d:d};
+let mode='title',T=0,lv=0,P,G,M=0,cs=null;
+
+
+let AC,mute=0,bt=0,bi=0,at=0;const BS=[110,110,131,98,110,110,147,131];
+function au(){if(!AC)try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}if(AC&&AC.state=='suspended')AC.resume()}
+function tone(f,d,ty='sine',v=.08,f2){if(!AC||mute)return;const o=AC.createOscillator(),g=AC.createGain(),t=AC.currentTime;o.type=ty;o.frequency.setValueAtTime(f,t);if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+d);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+d)}
+const S={sample:()=>tone(600,.15,'sine',.1,1300),hit:()=>{tone(300,.5,'sawtooth',.1,60);tone(150,.5,'square',.06,40)},win:()=>[523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.25,'triangle',.1),i*110))};
+function beat(dt){bt+=dt;at+=dt;if(bt>.5){bt=0;bi++;if(mode=='play')tone(BS[bi%8]*(lv>5?1.5:1),.35,'triangle',.07)}
+ if(mode=='play'&&M>25&&at>.3-M/500){at=0;tone(880,.07,'square',.04)}}
+function cue(){if(!cs)return;const i=cs.i;if(cs.a===intro){if(i==0)tone(80,5,'sine',.04,90);if(i==1)tone(300,4,'triangle',.05,900);if(i==2)tone(90,4,'sawtooth',.07,45);if(i==3){tone(1800,.4,'square',.1,100);tone(120,1.2,'sawtooth',.15,30);for(let k=0;k<6;k++)setTimeout(()=>tone(900,.25,'square',.06,600),k*500)}}
+ else{if(i==0)tone(70,4,'sine',.05,60);if(i==1)tone(200,.3,'square',.08,100);if(i==2){tone(1200,1,'sawtooth',.1,100);tone(80,1,'square',.08,40)}if(i==3)tone(300,3,'sine',.08,900)}}
+$('mu').onclick=()=>{mute=!mute;$('mu').textContent='Sound: '+(mute?'off':'on');au()};
+const LV=[
+{n:'Test Chamber',s:'Alarms are screaming. The lab is full of colour, and every guard only notices what stands out. Controls: WASD or arrows to move, Q/E to shift hue, Z/X for lightness, SPACE to sample the colour under you.',hint:'Hue matching: press SPACE to copy the colour you stand on.',smp:1,ht:24,lt:20,R:140,
+ z:[[0,0,270,H,190,45],[270,0,270,H,330,50],[540,0,260,H,45,55]],
+ g:[{p:[[330,80],[330,400]],s:70},{p:[[620,400],[620,80]],s:70}],st:[40,240],ex:[740,190,50,100]},
+{n:'Storage Corridor',s:'Sampling is jammed. The floor alternates between light and shadow. Guards spot brightness first.',hint:'Value: same hue, different brightness. Use Z/X to match light or dark.',smp:0,ht:30,lt:12,R:150,
+ z:[[0,0,200,H,270,25],[200,0,200,H,270,62],[400,0,200,H,270,25],[600,0,200,H,270,62]],
+ g:[{p:[[260,60],[260,420]],s:85},{p:[[470,420],[470,60]],s:85},{p:[[680,60],[680,420]],s:85}],st:[40,240],ex:[740,190,50,100]},
+{n:'Greenhouse',s:'Plants and glass. Colours here fade gently from one neighbour to the next.',hint:'Analogous colours sit side by side. Small hue shifts keep you hidden.',smp:0,ht:30,lt:18,R:150,
+ z:Array.from({length:10},(_,i)=>[i*80,0,80,H,150+i*14,42]),
+ g:[{p:[[200,60],[200,420]],s:90},{p:[[420,420],[420,60]],s:90},{p:[[620,60],[620,420]],s:90},{p:[[100,380],[700,380]],s:70}],st:[40,240],ex:[740,190,50,100]},
+{n:'Security Wing',s:'The walls are cycling through colours. A triadic palette: three hues, evenly spaced on the wheel.',hint:'Walls shift over time. Re-sample (SPACE, short cooldown) to keep up.',smp:1,ht:22,lt:18,R:150,
+ z:[[0,0,400,H,10,45,1],[400,0,400,H,130,45,1]],
+ g:[{p:[[250,60],[250,420]],s:95},{p:[[450,420],[450,60]],s:95},{p:[[650,60],[650,420]],s:95}],st:[40,240],ex:[740,190,50,100]},
+{n:'Exit Hall',s:'The sea is just beyond the door. The lab throws every trick at you: shifting hues and shifting light.',hint:'Hue and lightness both change. Stay calm and keep sampling.',smp:1,ht:20,lt:16,R:165,
+ z:[[0,0,200,H,0,30,1],[200,0,200,H,120,60,1],[400,0,200,H,240,30,1],[600,0,200,H,60,60,1]],
+ g:[{p:[[180,60],[180,420]],s:105},{p:[[330,420],[330,60]],s:105},{p:[[500,60],[500,420]],s:105},{p:[[660,420],[660,60]],s:105}],st:[40,240],ex:[740,190,50,100]}
+];
+
+const mk=(n,s,hint,smp,ht,lt,R,z,g)=>({n,s,hint,smp,ht,lt,R,z,g,st:[40,240],ex:[740,190,50,100]}),
+gd=(xs,sp)=>xs.map((x,i)=>({p:i%2?[[x,420],[x,60]]:[[x,60],[x,420]],s:sp})),
+col=(n,w,f)=>Array.from({length:n},(_,i)=>[i*w,0,w,H,...f(i)]),
+hz=(y,sp)=>({p:[[60,y],[740,y]],s:sp});
+LV.splice(4,0,
+mk('Laser Lab','Complementary colours sit opposite on the wheel. The floor flips between two of them, and the guards are sharper now.','Opposite hues alternate. Sample, then fine-tune with Q/E.',1,16,14,155,col(8,100,i=>[i%2?20:200,45]),gd([170,300,430,560,690],100)),
+mk('Server Room','Racks of blinking lights. Both hue and brightness change from tile to tile, and a guard now patrols sideways.','Check both the hue and the light of each tile.',1,14,12,155,Array.from({length:8},(_,i)=>[(i%4)*200,(i>3)*240,200,240,i%2?320:280,(i+(i>3))%2?60:30]),gd([200,400,600],105).concat(hz(410,90))),
+mk('Reactor Core','The whole floor glows and cycles through the wheel. Sampling will not stay accurate for long.','Everything shifts. Re-sample constantly.',1,16,16,160,col(4,200,i=>[i*90,45,1]),gd([160,300,450,600,720],115)),
+mk('Flooded Vault','Water has jammed the sampler. Eight shades of blue-green, and you must match them by eye.','No sampling here. Use Q/E and Z/X to blend into each shade.',0,14,12,155,col(8,100,i=>[180+i*25,35+i%2*25]),gd([150,280,420,560,690],105).concat(hz(380,95))),
+mk('Control Room','Half the floor is frozen, half is cycling. Six guards cover every angle.','Spot which zones move and which stay still.',1,14,14,160,col(4,200,i=>[i<2?i*120:200+i*40,i%2?28:62,i>1?1:0]),gd([140,260,380,500,620,720],115)),
+mk('Final Corridor','The longest hall in the lab. Ten tiles cycle with alternating light and dark. Almost there.','Short bursts: sample, adjust, move.',1,13,13,165,col(10,80,i=>[i*37,i%2?28:62,1]),gd([130,250,370,490,610,710],125).concat(hz(140,110)))
+);
+const zh=z=>(z[4]+(z[6]?T*SH:0))%360;
+function zc(px,py){const z=[...LV[lv].z].reverse().find(z=>px>=z[0]&&px<z[0]+z[2]&&py>=z[1]&&py<z[1]+z[3])||LV[lv].z[0];return{h:zh(z),l:z[5]}}
+
+function octo(X,Y,r,col,t,a=0){x.save();x.strokeStyle=col;x.fillStyle=col;x.lineCap='round';x.lineWidth=r*.3;
+ for(let i=0;i<8;i++){const q=i*Math.PI/4,w=Math.sin(t*4+i)*.5,w2=Math.sin(t*3+i*2)*.45;x.beginPath();x.moveTo(X+Math.cos(q)*r*.6,Y+Math.sin(q)*r*.6);
+  x.quadraticCurveTo(X+Math.cos(q+w)*r*1.35,Y+Math.sin(q+w)*r*1.35,X+Math.cos(q+w2)*r*1.8,Y+Math.sin(q+w2)*r*1.8);x.stroke()}
+ x.beginPath();x.arc(X,Y,r,0,7);x.fill();x.fillStyle='#fff';
+ for(const s of[-1,1]){const ex=X+Math.cos(a)*r*.35-Math.sin(a)*s*r*.4,ey=Y+Math.sin(a)*r*.35+Math.cos(a)*s*r*.4;x.beginPath();x.arc(ex,ey,r*.26,0,7);x.fill();x.fillStyle='#111';x.beginPath();x.arc(ex+Math.cos(a)*r*.08,ey+Math.sin(a)*r*.08,r*.12,0,7);x.fill();x.fillStyle='#fff'}
+ x.restore()}
+function sci(X,Y,s,o={}){x.save();x.translate(X,Y);x.scale(s*(o.f||1),s);
+ x.fillStyle='#e9eef5';x.fillRect(-26,0,52,90);x.fillStyle='#2c3550';x.fillRect(-18,90,14,40);x.fillRect(4,90,14,40);
+ x.fillStyle='#e8b998';x.beginPath();x.arc(0,-16,18,0,7);x.fill();
+ x.fillStyle='#5a2d1c';x.beginPath();x.arc(0,-22,19,Math.PI,6.28);x.fill();
+ x.strokeStyle='#222';x.lineWidth=2;x.strokeRect(-12,-20,10,8);x.strokeRect(2,-20,10,8);
+ if(o.ink){x.fillStyle=`rgba(21,10,36,${o.ink})`;x.beginPath();x.arc(0,-14,17,0,7);x.fill()}
+ x.strokeStyle='#e9eef5';x.lineWidth=11;x.lineCap='round';x.beginPath();x.moveTo(22,12);x.lineTo(42+(o.ax||0),30+(o.ay||0));x.stroke();x.restore()}
+function lab(){const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#1b2a4a');g.addColorStop(1,'#101a33');x.fillStyle=g;x.fillRect(0,0,W,H);
+ x.fillStyle='#2a3b5e';x.fillRect(0,380,W,100);x.fillStyle='#34476f';x.fillRect(20,130,210,8);
+ for(let i=0;i<5;i++){x.fillStyle=hsl(i*70,60,55);x.fillRect(30+i*38,90,22,40)}}
+function tank(){x.fillStyle='rgba(80,180,220,.35)';x.fillRect(470,120,230,260);x.strokeStyle='#bfe6f5';x.lineWidth=4;x.strokeRect(470,120,230,260);x.fillStyle='#46566f';x.fillRect(455,380,260,20)}
+function cracks(p){x.strokeStyle='#e8fbff';x.lineWidth=2;for(let i=0;i<9;i++){const a=i*.7,l=p*(50+i%3*30);x.beginPath();x.moveTo(585,250);x.lineTo(585+Math.cos(a)*l,250+Math.sin(a)*l);x.stroke()}}
+function door(){const g=x.createLinearGradient(700,0,800,0);g.addColorStop(0,'#bff3ff');g.addColorStop(1,'#4fc7e8');x.fillStyle=g;x.fillRect(700,150,100,230)}
+
+const intro=[
+{d:6,c:'Deep inside a hidden lab, Dr. Voss studies an octopus named Chroma. Its skin can copy any colour.',f:t=>{lab();tank();octo(585,310,30,hsl(20,60,55),t);sci(280,230,1.2,{ax:Math.sin(t*2)*4})}},
+{d:5,c:'Tonight she begins the final experiment. Chroma is the test subject.',f:t=>{lab();tank();octo(585,310,30,hsl(t*90,60,55),t);sci(380,230,1.2,{ax:30,ay:-12})}},
+{d:4,c:'But Chroma has been watching, and learning. It pushes against the glass...',f:t=>{lab();tank();cracks(t/4);octo(585,310,30,hsl(0,70,50),t*3);sci(380,230,1.2,{ax:30,ay:-12})}},
+{d:5,c:'CRASH! The glass breaks, alarms scream, and the way out is open.',f:t=>{lab();x.fillStyle='rgba(80,180,220,.2)';x.fillRect(470,120+t*40,230,260-t*40);x.strokeStyle='#bfe6f5';x.strokeRect(470,120,230,260);
+ for(let i=0;i<26;i++){const a=i*2.4,v=90+i%5*45,X=585+Math.cos(a)*v*Math.min(t,1.5),Y=250+Math.sin(a)*v*Math.min(t,1.5)+t*t*30;x.fillStyle='#d6f4ff';x.fillRect(X,Y,7,7)}
+ octo(585-t*45,310-Math.sin(Math.min(t,3)*1.05)*50,30,hsl(0,70,50),t*3);sci(380-t*12,230,1.2,{ax:-10,ay:-25});x.fillStyle=`rgba(255,0,60,${.14*Math.abs(Math.sin(t*8))})`;x.fillRect(0,0,W,H)}}
+];
+const outro=[
+{d:4,c:'The exit hall. The sea is right there. Then a shadow steps in front of the door.',f:t=>{lab();door();octo(250+t*10,300,18,hsl(120,55,45),t);sci(450,220,1.4,{f:-1})}},
+{w:1,c:'Dr. Voss grabs Chroma! Press SPACE to spray venom!',f:t=>{lab();door();sci(330,200,1.4,{ax:60,ay:-10});octo(430,255,22,hsl(0,70,50),t*5,Math.PI);x.fillStyle='#ff5fae';x.font='bold 24px sans-serif';x.textAlign='center';x.fillText('SPACE!',400,100+Math.sin(t*8)*5)}},
+{d:3.5,c:'The venom hits her face. She stumbles back, blinded.',f:t=>{lab();door();const p=cl(t/1.2,0,1);sci(330-t*8,200,1.4,{ax:30,ay:-60,ink:cl(t-.9,0,1)});octo(430,255,22,'#2b1a4a',t*5,Math.PI);
+ for(let i=0;i<40;i++){const q=cl(p*1.4-i/80,0,1),X=430+(325-430)*q+Math.sin(i*7)*18*(1-q),Y=255+(185-255)*q+Math.cos(i*5)*14*(1-q);x.fillStyle='#1b0f2e';x.beginPath();x.arc(X,Y,4+i%4,0,7);x.fill()}}},
+{d:4.5,c:'Chroma slips free and slides out into the open sea.',f:t=>{lab();door();sci(300,200,1.4,{ax:20,ay:-60,ink:1});const p=cl(t/3.5,0,1);octo(430+p*340,290+p*10,22,hsl(190,60,50),t*6,0)}}
+];
+function runCS(a,done){cs={a,i:0,t:0,done};mode='cs';$('skip').hidden=false;$('cap').textContent=a[0].c;cue();$('ov').hidden=true}
+function endCS(){const d=cs.done;cs=null;$('skip').hidden=true;$('cap').textContent='';d()}
+$('skip').onclick=()=>{if(cs)endCS()};
+
+function ov(t,p,b,f){$('ov').querySelector('h2').textContent=t;$('ov').querySelector('p').textContent=p;$('ovb').textContent=b;$('ov').hidden=false;$('ovb').onclick=()=>{au();$('ov').hidden=true;sp=0;f()};$('ovb').focus()}
+function startLevel(i,quick){lv=i;const L=LV[i];P={x:L.st[0],y:L.st[1],h:200,l:50,m:0,cd:0,a:0};
+ G=L.g.map(g=>({x:g.p[0][0],y:g.p[0][1],i:1,a:0,s:g.s,p:g.p}));M=0;T=0;$('hint').textContent=L.hint;mode='wait';$('cap').textContent='Level '+(i+1)+' of '+LV.length+': '+L.n;
+ if(quick)S.hit();if(quick)return ov('Spotted!','A guard noticed you. Match the colour beneath you before they get close.','Try again',()=>mode='play');
+ ov(L.n,L.s,'Go',()=>mode='play')}
+function upd(dt){const L=LV[lv];T+=dt;
+ const dx=(K.ArrowRight||K.KeyD?1:0)-(K.ArrowLeft||K.KeyA?1:0),dy=(K.ArrowDown||K.KeyS?1:0)-(K.ArrowUp||K.KeyW?1:0);
+ if(dx||dy){const m=Math.hypot(dx,dy);P.x+=dx/m*150*dt;P.y+=dy/m*150*dt;P.a=Math.atan2(dy,dx)}
+ P.x=cl(P.x,16,W-16);P.y=cl(P.y,16,H-16);
+ if(K.KeyQ)P.h-=110*dt;if(K.KeyE)P.h+=110*dt;if(K.KeyZ)P.l-=45*dt;if(K.KeyX)P.l+=45*dt;P.l=cl(P.l,10,90);P.h=(P.h+360)%360;
+ P.cd-=dt;const c=zc(P.x,P.y);
+ if(sp&&L.smp&&P.cd<=0){P.h=c.h;P.l=c.l;S.sample();P.cd=lv>2?1.2:.3}sp=0;
+ P.m=Math.hypot(dH(P.h,c.h)/L.ht,(P.l-c.l)/L.lt);const hid=P.m<1;let seen=false,hit=false;
+ for(const g of G){const t=g.p[g.i],d=Math.hypot(t[0]-g.x,t[1]-g.y);g.a=Math.atan2(t[1]-g.y,t[0]-g.x);
+  if(d<4)g.i=(g.i+1)%g.p.length;else{g.x+=(t[0]-g.x)/d*g.s*dt;g.y+=(t[1]-g.y)/d*g.s*dt}
+  const dd=Math.hypot(P.x-g.x,P.y-g.y);let da=Math.abs(Math.atan2(P.y-g.y,P.x-g.x)-g.a);da=da>Math.PI?2*Math.PI-da:da;
+  if((dd<L.R&&da<.55)||dd<40)seen=true;if(dd<24)hit=true}
+ M=cl(M+((seen&&!hid)?120:-40)*dt,0,100);
+ $('cam').textContent=hid?'Hidden':'Visible';$('sw').style.background=hsl(P.h,55,P.l);
+ const e=L.ex;if(P.x>e[0]&&P.y>e[1]&&P.y<e[1]+e[3]){if(lv<LV.length-1){S.win();mode='wait';startLevel(lv+1)}else{mode='wait';runCS(outro,()=>{mode='end';ov('Chroma is free','The venom bought just enough time. Chroma dives into the open sea, carrying every colour it learned: hue, value, analogous, complementary, triadic.','Play again',()=>{startLevel(0)})})}return}
+ if(M>=100||hit)startLevel(lv,1)}
+function drawPlay(){const L=LV[lv];
+ for(const z of L.z){x.fillStyle=hsl(zh(z),55,z[5]);x.fillRect(z[0],z[1],z[2],z[3])}
+ x.strokeStyle='rgba(255,255,255,.08)';x.lineWidth=1;for(let i=0;i<W;i+=40){x.beginPath();x.moveTo(i,0);x.lineTo(i,H);x.stroke()}for(let j=0;j<H;j+=40){x.beginPath();x.moveTo(0,j);x.lineTo(W,j);x.stroke()}
+ const e=L.ex;x.fillStyle='#f4fbff';x.fillRect(...e);x.fillStyle='#10263a';x.font='bold 16px sans-serif';x.textAlign='center';x.fillText('EXIT',e[0]+e[2]/2,e[1]+e[3]/2+5);
+ for(const g of G){x.fillStyle='rgba(255,240,150,.24)';x.beginPath();x.moveTo(g.x,g.y);x.arc(g.x,g.y,L.R,g.a-.55,g.a+.55);x.fill();
+  x.fillStyle='#e9eef5';x.beginPath();x.arc(g.x,g.y,14,0,7);x.fill();x.fillStyle='#5a2d1c';x.beginPath();x.arc(g.x+Math.cos(g.a)*4,g.y+Math.sin(g.a)*4,8,0,7);x.fill()}
+ octo(P.x,P.y,13,hsl(P.h,55,P.l),T,P.a);
+ x.fillStyle='rgba(0,0,0,.35)';x.fillRect(P.x-18,P.y-30,36,5);x.fillStyle=M>60?'#ff3b3b':'#ffd23f';x.fillRect(P.x-18,P.y-30,36*M/100,5)}
+let last=0;
+function loop(ts){const dt=Math.min(.05,(ts-last)/1000||0);last=ts;beat(dt);
+ if(mode=='play'){upd(dt);x.clearRect(0,0,W,H);drawPlay()}
+ else if(mode=='cs'&&cs){cs.t+=dt;const s=cs.a[cs.i];x.clearRect(0,0,W,H);s.f(cs.t);
+  if(s.w?sp:cs.t>s.d){sp=0;cs.i++;cs.t=0;if(cs.i>=cs.a.length)endCS();else{$('cap').textContent=cs.a[cs.i].c;cue()}}}
+ else if(mode=='wait'&&G){x.clearRect(0,0,W,H);drawPlay()}
+ requestAnimationFrame(loop)}
+$('ovb').onclick=()=>{au();runCS(intro,()=>startLevel(0))};
+requestAnimationFrame(loop);
+</script></body></html>
